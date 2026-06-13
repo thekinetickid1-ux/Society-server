@@ -5,20 +5,25 @@ const cors = require('cors');
 // Initialization for Production (Railway)
 const admin = require('firebase-admin');
 
-// 1. Load configuration: Use Railway variable OR local file
+// Use environment variables provided by Railway
+// If they aren't there, we fallback to the local file (only for your machine)
 let serviceAccount;
-if (process.env.FIREBASE_SERVICE_ACCOUNT) {
-  // We are in Railway
-  serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
-} else {
-  // We are local
-  serviceAccount = require('./firebase-adminsdk-key.json');
+try {
+  if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+    serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+  } else {
+    serviceAccount = require('./firebase-adminsdk-key.json');
+  }
+} catch (e) {
+  console.error("Critical Error: Firebase credentials missing!");
+  process.exit(1); // Stop the server if we have no credentials
 }
 
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
   databaseURL: process.env.DATABASE_URL
 });
+
 
 
 
