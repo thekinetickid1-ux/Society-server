@@ -5,15 +5,21 @@ const cors = require('cors');
 // Initialization for Production (Railway)
 const admin = require('firebase-admin');
 
-// Railway will provide the JSON string in an Environment Variable named FIREBASE_SERVICE_ACCOUNT
-const serviceAccount = process.env.FIREBASE_SERVICE_ACCOUNT 
-  ? JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT) 
-  : require('./firebase-adminsdk-key.json'); // Fallback for local testing
+// 1. Load configuration: Use Railway variable OR local file
+let serviceAccount;
+if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+  // We are in Railway
+  serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+} else {
+  // We are local
+  serviceAccount = require('./firebase-adminsdk-key.json');
+}
 
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
-  databaseURL: process.env.DATABASE_URL // Set this in Railway Variables!
+  databaseURL: process.env.DATABASE_URL
 });
+
 
 
 const db = admin.database();
