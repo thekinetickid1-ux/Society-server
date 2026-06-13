@@ -51,6 +51,25 @@ app.get('/api/sync-chats', async (req, res) => {
 });
 
 // POST: Send message
+app.post('/api/register-full', async (req, res) => {
+    const { name, pin, initialFriendId } = req.body;
+
+    // 1. Create User
+    const newUserRef = db.ref('users').push({ name, pin });
+    const userId = newUserRef.key;
+
+    // 2. Handle initial friend request if provided
+    if (initialFriendId) {
+        await db.ref(`friend_requests/${initialFriendId}`).push({
+            from: userId,
+            status: 'pending'
+        });
+    }
+
+    // 3. Return data so frontend can cache it
+    res.json({ userId, friends: [] });
+});
+
 app.post('/api/send-message', async (req, res) => {
     const { username, text } = req.body;
     try {
