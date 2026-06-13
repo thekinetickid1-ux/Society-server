@@ -1,104 +1,72 @@
 const express = require('express');
+const admin = require('firebase-admin');
 const cors = require('cors');
 
-// 1. Initialize Firebase Admin SDK (Your single bridge to Firebase)
-// Initialization for Production (Railway)
-const admin = require('firebase-admin');
-
-// Use environment variables provided by Railway
-// If they aren't there, we fallback to the local file (only for your machine)
-let serviceAccount;
-try {
-  if (process.env.FIREBASE_SERVICE_ACCOUNT) {
-    serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
-  } else {
-    serviceAccount = require('./firebase-adminsdk-key.json');
-  }
-} catch (e) {
-  console.error("Critical Error: Firebase credentials missing!");
-  process.exit(1); // Stop the server if we have no credentials
-}
-
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount),
-  databaseURL: process.env.DATABASE_URL
-});
-
-
-
-
-const db = admin.database();
-const chatRef = db.ref('global_chat');
-
 const app = express();
-app.use(cors()); // Allows your website domain to securely fetch data
+
+// 1. CORS Configuration: Allows your frontend to connect
+app.use(cors({
+    origin: '*',
+    methods: ['GET', 'POST'],
+    allowedHeaders: ['Content-Type']
+}));
+
 app.use(express.json());
 
-// ===================================================
-//  ENDPOINT 1: FETCH PACKED CHAT DELTAS (SYNC ENGINE)
-// ===================================================
-app.get('/api/sync-chats', async (req, res) => {
-  try {
-    const lastId = req.query.lastMessageId;
-    
-    // Pull the last 100 messages from Firebase to process
-    const snapshot = await chatRef.orderByKey().limitToLast(100).once('value');
-    const allMessages = snapshot.val() || {};
-    
-    const packedPackage = [];
-    
-    // Loop through the data and bundle ONLY what the client is missing
-    Object.keys(allMessages).forEach((id) => {
-      // Firebase IDs naturally sort alphabetically/chronologically.
-      // If the message ID is greater than the client's last seen ID, it's new!
-      if (!lastId || id > lastId) {
-        packedPackage.push({
-          id: id,
-          u: allMessages[id].username,
-          t: allMessages[id].text,
-          ts: allMessages[id].timestamp
-        });
-      }
-    });
-    
-    // Return the packed payload array
-    res.json({ messages: packedPackage });
-    
-  } catch (error) {
-    console.error("Packing error:", error);
-    res.status(500).json({ error: "Failed to assemble data package." });
-  }
-});
-
-// ===================================================
-//  ENDPOINT 2: INCOMING WRITE GATEWAY
-// ===================================================
-app.post('/api/send-message', async (req, res) => {
-  try {
-    const { username, text } = req.body;
-    
-    if (!username || !text || text.trim() === "") {
-      return res.status(400).json({ error: "Invalid data fields." });
+// 2. Firebase Initialization
+let serviceAccount;
+try {
+    if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+        serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+    } else {
+        // Fallback for local development
+        serviceAccount = require('./firebase-adminsdk-key.json');
     }
-
-    // Push directly to Firebase (counts as exactly 1 cloud write operation)
-    const newMsgRef = await chatRef.push({
-      username: username,
-      text: text,
-      timestamp: Date.now()
-    });
-
-    res.json({ success: true, id: newMsgRef.key });
     
-  } catch (error) {
-    res.status(500).json({ error: "Failed to dispatch write." });
-  }
+    admin.initializeApp({
+        credential: admin.credential.cert(serviceAccount),
+        databaseURL: process.env.DATABASE_URL
+    });
+} catch (error) {
+    console.error("Critical Error: Firebase config failed:", error);
+    process.exit(1);
+}
+
+const db = admin.database();
+
+// 3. API ROUTES
+// GET: Sync messages
+app.get('/api/sync-chats', async (req, res) => {
+    const lastId = req.query.lastMessageId;
+    try {
+        const snapshot = await db.ref('messages').orderByKey().startAfter(lastId || "").once('value');
+        const messages = [];
+        snapshot.forEach((child) => {
+            messages.push({ id: child.key, ...child.val() });
+        });
+        res.json({ messages });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
 });
 
-// Start your internet server
+// POST: Send message
+app.post('/api/send-message', async (req, res) => {
+    const { username, text } = req.body;
+    try {
+        await db.ref('messages').push({
+            u: username,
+            t: text,
+            timestamp: admin.database.ServerValue.TIMESTAMP
+        });
+        res.status(200).send("Message sent");
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// 4. Server Listener
 const PORT = process.env.PORT || 8080;
-server = app.listen(PORT, () => {
-  console.log(`Packet Sync Engine rolling on port ${PORT}`);
+app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Packet Sync Engine rolling on port ${PORT}`);
 });
-
-
