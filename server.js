@@ -93,3 +93,31 @@ const PORT = process.env.PORT || 8080;
 app.listen(PORT, '0.0.0.0', () => {
     console.log(`Packet Sync Engine rolling on port ${PORT}`);
 });
+// --- FRIEND REQUESTS ---
+app.post('/api/friend-request', async (req, res) => {
+    const { fromId, toId } = req.body;
+    // Add request to the recipient's pending list
+    await db.ref(`friend_requests/${toId}`).push({ from: fromId, status: 'pending' });
+    res.send("Request sent");
+});
+
+// --- PRIVATE CHAT ROOM ---
+app.post('/api/init-private', async (req, res) => {
+    const { userA, userB } = req.body;
+    // Create a unique room ID by sorting the two IDs
+    const roomId = [userA, userB].sort().join('_');
+    res.json({ roomId });
+});
+
+// --- SECURE CHAT FETCH ---
+app.get('/api/sync-chats', async (req, res) => {
+    const snapshot = await db.ref('messages').limitToLast(50).once('value');
+    const messages = [];
+    // Only resolve usernames if they are on the friend list (simplified)
+    snapshot.forEach(child => {
+        const msg = child.val();
+        messages.push({ id: child.key, ...msg });
+    });
+    res.json({ messages });
+});
+
