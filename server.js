@@ -36,6 +36,10 @@ const db = admin.database();
 
 // 3. API ROUTES
 // GET: Sync messages
+app.get('/test-route', (req, res) => {
+    res.send("If you see this, the server is running the new code!");
+});
+
 app.get('/api/sync-chats', async (req, res) => {
     const lastId = req.query.lastMessageId;
     try {
