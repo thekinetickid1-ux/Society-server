@@ -1,6 +1,5 @@
 const express = require('express');
 const cors = require('cors');
-const admin = require('firebase-admin');
 
 // 1. Initialize Firebase Admin SDK (Your single bridge to Firebase)
 // Initialization for Production (Railway)
